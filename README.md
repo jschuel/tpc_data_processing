@@ -1,3 +1,6 @@
+
+**Note: [ROOT](https://root.cern/install/) is required to run these data processing scripts. I would recommend creating a new environment in anaconda and installing ROOT in that environment.**
+
 # tpc_data_processing
 This repository processes FE-I4 pixel chip data recorded using the pyBAR software package. The repository was built for the BEAST TPC detectors and includes the following:  
 
