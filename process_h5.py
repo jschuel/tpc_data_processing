@@ -13,6 +13,7 @@ import array
 import ROOT
 from ROOT import TVector3
 from tqdm import tqdm
+tqdm.pandas() #to use progress_apply
 from numba import jit
 import os
 pd.set_option('mode.chained_assignment', None) #remove pandas copy warning
@@ -72,27 +73,22 @@ class process_h5:
             self.raw_hits['z'] = self.raw_hits['relative_BCID']*self.calibration['v_drift']
         except:
             self.raw_hits['z'] = self.raw_hits['relative_BCID']*250. #defaults to 250
+            
         print('Grouping hit data into arrays to merge with metadata')
-        with tqdm(total=9) as progress:
-            col = self.raw_hits.groupby('event_number')['column'].apply(lambda x: np.array(x))
-            progress.update(1)
-            row = self.raw_hits.groupby('event_number')['row'].apply(lambda x: np.array(x))
-            progress.update(1)
-            tot = self.raw_hits.groupby('event_number')['tot'].apply(lambda x: np.array(x))
-            progress.update(1)
-            x = self.raw_hits.groupby('event_number')['x'].apply(lambda x: np.array(x))
-            progress.update(1)
-            y = self.raw_hits.groupby('event_number')['y'].apply(lambda x: np.array(x))
-            progress.update(1)
-            z = self.raw_hits.groupby('event_number')['z'].apply(lambda x: np.array(x))
-            progress.update(1)
-            bc = self.raw_hits.groupby('event_number')['relative_BCID'].apply(lambda x: np.array(x))
-            progress.update(1)
-            q = self.raw_hits.groupby('event_number')['pixel_charge'].apply(lambda x: np.array(x)) #computes status code for event. OK codes are 8228 or 36, rest should be rejected
-            progress.update(1)
-            E = self.raw_hits.groupby('event_number')['pixel_energy'].apply(lambda x: np.array(x)) #computes status code for event. OK codes are 8228 or 36, rest should be rejected
-            progress.update(1)
-            print('DONE!')
+
+        #Store hit data as an array for each unique event
+        col = self.raw_hits.groupby('event_number')['column'].progress_apply(lambda x: np.array(x))
+        row = self.raw_hits.groupby('event_number')['row'].progress_apply(lambda x: np.array(x))
+        tot = self.raw_hits.groupby('event_number')['tot'].progress_apply(lambda x: np.array(x))
+        x = self.raw_hits.groupby('event_number')['x'].progress_apply(lambda x: np.array(x))
+        y = self.raw_hits.groupby('event_number')['y'].progress_apply(lambda x: np.array(x))
+        z = self.raw_hits.groupby('event_number')['z'].progress_apply(lambda x: np.array(x))
+        bc = self.raw_hits.groupby('event_number')['relative_BCID'].progress_apply(lambda x: np.array(x))
+        q = self.raw_hits.groupby('event_number')['pixel_charge'].progress_apply(lambda x: np.array(x)) #computes status code for event. OK codes are 8228 or 36, rest should be rejected
+        E = self.raw_hits.groupby('event_number')['pixel_energy'].progress_apply(lambda x: np.array(x)) #computes status code for event. OK codes are 8228 or 36, rest should be rejected
+            
+        print('DONE!')
+        
         err = self.raw_hits.groupby('event_number')['event_status'].mean() #computes status code for event. OK codes are 8228 or 36, rest should be rejected
         grouped_hits = pd.DataFrame() #populate dataframe with arrays of hit data
         grouped_hits['npoints'] = col.apply(lambda x: len(x)) #number of hits in the event
@@ -262,24 +258,24 @@ class process_h5:
             ucfs.append(ucf)
             ucs.append(uc)
             lcs.append(lc)
-        data['x_track'] = xtracks
+        data['x_track'] = xtracks #coordinates along principal axis of 3D track
         data['y_track'] = ytracks
         data['z_track'] = ztracks
         data['theta'] = thetas
         data['phi'] = phis
-        data['upper_charge_fraction'] = ucfs
+        data['upper_charge_fraction'] = ucfs #fraction of charge on the upper half of event to use for head-tail
         data['upper_charge'] = ucs
         data['lower_charge'] = lcs
-        data['LAPA'] = ls
-        data['SDCD'] = stds
-        data['wSDCD'] = wstds
-        data['CylThick'] = (data['y_track']**2+data['z_track']**2).apply(lambda x: x.sum())
+        data['LAPA'] = ls #length along principal axis
+        data['SDCD'] = stds #standard deviation of charge distribution
+        data['wSDCD'] = wstds #time-over-threshold-weighted SDCD
+        data['CylThick'] = (data['y_track']**2+data['z_track']**2).apply(lambda x: x.sum()) #thickness of "cylinder" around principal axis
         data['ChargeUnif'] = chargeunif
         #data['PrincipalAxis'] = xt_hats #direction along PA
         print('DONE!')        
         return data
 
-    # Routine for making ROOT ntuple
+    # Routine for writing output as a ROOT ntuple
 
     def write_ROOT_output(self):
         data = self.processed_data
@@ -316,6 +312,8 @@ class process_h5:
         output.Write()
         output.Close()
 
+    #Routine for writing output to .pkl or .feather
+    
     def write_output(self,output_extension):
         data = self.processed_data
         data['raw_event_number'] = data['event_number']
